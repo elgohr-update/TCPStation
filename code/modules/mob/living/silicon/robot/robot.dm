@@ -3,6 +3,8 @@
 	spark_system.set_up(5, 0, src)
 	spark_system.attach(src)
 
+	ADD_TRAIT(src, TRAIT_CAN_STRIP, INNATE_TRAIT)
+
 	wires = new /datum/wires/robot(src)
 	AddElement(/datum/element/empprotection, EMP_PROTECT_WIRES)
 	AddElement(/datum/element/ridable, /datum/component/riding/creature/cyborg)
@@ -11,7 +13,6 @@
 
 	robot_modules_background = new()
 	robot_modules_background.icon_state = "block"
-	robot_modules_background.layer = HUD_LAYER //Objects that appear on screen are on layer ABOVE_HUD_LAYER, UI should be just below it.
 	robot_modules_background.plane = HUD_PLANE
 
 	inv1 = new /atom/movable/screen/robot/module1()
@@ -48,29 +49,33 @@
 	//If this body is meant to be a borg controlled by the AI player
 	if(shell)
 		make_shell()
+	else
+		//MMI stuff. Held togheter by magic. ~Miauw
+		if(!mmi?.brainmob)
+			mmi = new (src)
+			mmi.brain = new /obj/item/organ/brain(mmi)
+			mmi.brain.organ_flags |= ORGAN_FROZEN
+			mmi.brain.name = "[real_name]'s brain"
+			mmi.name = "[initial(mmi.name)]: [real_name]"
+			mmi.set_brainmob(new /mob/living/brain(mmi))
+			mmi.brainmob.name = src.real_name
+			mmi.brainmob.real_name = src.real_name
+			mmi.brainmob.container = mmi
+			mmi.update_appearance()
+		setup_default_name()
 
-	//MMI stuff. Held togheter by magic. ~Miauw
-	else if(!mmi || !mmi.brainmob)
-		mmi = new (src)
-		mmi.brain = new /obj/item/organ/brain(mmi)
-		mmi.brain.organ_flags |= ORGAN_FROZEN
-		mmi.brain.name = "[real_name]'s brain"
-		mmi.name = "[initial(mmi.name)]: [real_name]"
-		mmi.set_brainmob(new /mob/living/brain(mmi))
-		mmi.brainmob.name = src.real_name
-		mmi.brainmob.real_name = src.real_name
-		mmi.brainmob.container = mmi
-		mmi.update_appearance()
-
-	INVOKE_ASYNC(src, .proc/updatename)
-
-	playsound(loc, 'sound/voice/liveagain.ogg', 75, TRUE)
 	aicamera = new/obj/item/camera/siliconcam/robot_camera(src)
 	toner = tonermax
 	diag_hud_set_borgcell()
 	logevent("System brought online.")
 
-/mob/living/silicon/robot/model/syndicate/Initialize()
+	alert_control = new(src, list(ALARM_ATMOS, ALARM_FIRE, ALARM_POWER, ALARM_CAMERA, ALARM_BURGLAR, ALARM_MOTION), list(z))
+	RegisterSignal(alert_control.listener, COMSIG_ALARM_TRIGGERED, .proc/alarm_triggered)
+	RegisterSignal(alert_control.listener, COMSIG_ALARM_CLEARED, .proc/alarm_cleared)
+	alert_control.listener.RegisterSignal(src, COMSIG_LIVING_DEATH, /datum/alarm_listener/proc/prevent_alarm_changes)
+	alert_control.listener.RegisterSignal(src, COMSIG_LIVING_REVIVE, /datum/alarm_listener/proc/allow_alarm_changes)
+
+/mob/living/silicon/robot/model/syndicate/Initialize(mapload)
 	. = ..()
 	laws = new /datum/ai_laws/syndicate_override()
 	addtimer(CALLBACK(src, .proc/show_playstyle), 5)
@@ -86,6 +91,25 @@
 		modularInterface = new /obj/item/modular_computer/tablet/integrated/syndicate(src)
 	return ..()
 
+/**
+ * Sets the tablet theme and icon
+ *
+ * These variables are based on if the borg is a syndicate type or is emagged. This gets used in model change code
+ * and also borg emag code.
+ */
+/mob/living/silicon/robot/proc/set_modularInterface_theme()
+	if(istype(model, /obj/item/robot_model/syndicate) || emagged)
+		modularInterface.device_theme = "syndicate"
+		modularInterface.icon_state = "tablet-silicon-syndicate"
+		modularInterface.icon_state_powered = "tablet-silicon-syndicate"
+		modularInterface.icon_state_unpowered = "tablet-silicon-syndicate"
+	else
+		modularInterface.device_theme = "ntos"
+		modularInterface.icon_state = "tablet-silicon"
+		modularInterface.icon_state_powered = "tablet-silicon"
+		modularInterface.icon_state_unpowered = "tablet-silicon"
+	modularInterface.update_icon()
+
 //If there's an MMI in the robot, have it ejected when the mob goes away. --NEO
 /mob/living/silicon/robot/Destroy()
 	var/atom/T = drop_location()//To hopefully prevent run time errors.
@@ -98,7 +122,7 @@
 			mind.transfer_to(mmi.brainmob)
 			mmi.update_appearance()
 		else
-			to_chat(src, "<span class='boldannounce'>Oops! Something went very wrong, your MMI was unable to receive your mind. You have been ghosted. Please make a bug report so we can fix this bug.</span>")
+			to_chat(src, span_boldannounce("Oops! Something went very wrong, your MMI was unable to receive your mind. You have been ghosted. Please make a bug report so we can fix this bug."))
 			ghostize()
 			stack_trace("Borg MMI lacked a brainmob")
 		mmi = null
@@ -118,14 +142,16 @@
 	QDEL_NULL(inv1)
 	QDEL_NULL(inv2)
 	QDEL_NULL(inv3)
+	QDEL_NULL(spark_system)
+	QDEL_NULL(alert_control)
 	cell = null
 	return ..()
 
 /mob/living/silicon/robot/Topic(href, href_list)
 	. = ..()
 	//Show alerts window if user clicked on "Show alerts" in chat
-	if (href_list["showalerts"])
-		robot_alerts()
+	if(href_list["showalerts"])
+		alert_control.ui_interact(src)
 
 /mob/living/silicon/robot/get_cell()
 	return cell
@@ -135,7 +161,7 @@
 		return
 
 	if(wires.is_cut(WIRE_RESET_MODEL))
-		to_chat(src,"<span class='userdanger'>ERROR: Model installer reply timeout. Please check internal connections.</span>")
+		to_chat(src,span_userdanger("ERROR: Model installer reply timeout. Please check internal connections."))
 		return
 
 	var/list/model_list = list("Engineering" = /obj/item/robot_model/engineering, \
@@ -148,55 +174,55 @@
 	if(!CONFIG_GET(flag/disable_secborg))
 		model_list["Security"] = /obj/item/robot_model/security
 
-	var/input_model = input("Please, select a model!", "Robot", null, null) as null|anything in sortList(model_list)
+	// Create radial menu for choosing borg model
+	var/list/model_icons = list()
+	for(var/option in model_list)
+		var/obj/item/robot_model/model = model_list[option]
+		var/model_icon = initial(model.cyborg_base_icon)
+		model_icons[option] = image(icon = 'icons/mob/robots.dmi', icon_state = model_icon)
+
+	var/input_model = show_radial_menu(src, src, model_icons, radius = 42)
 	if(!input_model || model.type != /obj/item/robot_model)
 		return
 
 	model.transform_to(model_list[input_model])
 
-/mob/living/silicon/robot/proc/updatename(client/C)
+
+/// Used to setup the a basic and (somewhat) unique name for the robot.
+/mob/living/silicon/robot/proc/setup_default_name()
+	var/new_name
+	if(GLOB.current_anonymous_theme) //only robotic renames will allow for anything other than the anonymous one
+		new_name = GLOB.current_anonymous_theme.anonymous_ai_name(FALSE)
+	else if(custom_name)
+		new_name = custom_name
+	else
+		new_name = get_standard_name()
+	if(new_name != real_name)
+		fully_replace_character_name(real_name, new_name)
+
+
+/// Updates the borg name taking the client preferences into account.
+/mob/living/silicon/robot/proc/updatename(client/pref_source)
 	if(shell)
 		return
-	if(!C)
-		C = client
+	if(!pref_source)
+		pref_source = client
 	var/changed_name = ""
-	if(custom_name)
+	if(GLOB.current_anonymous_theme) //only robotic renames will allow for anything other than the anonymous one
+		changed_name = GLOB.current_anonymous_theme.anonymous_ai_name(FALSE)
+	else if(custom_name)
 		changed_name = custom_name
-	if(SSticker.anonymousnames) //only robotic renames will allow for anything other than the anonymous one
-		changed_name = SSticker.anonymousnames.anonymous_ai_name(FALSE)
-	if(!changed_name && C && C.prefs.custom_names["cyborg"] != DEFAULT_CYBORG_NAME)
-		apply_pref_name("cyborg", C)
+	else if(pref_source && pref_source.prefs.read_preference(/datum/preference/name/cyborg) != DEFAULT_CYBORG_NAME)
+		apply_pref_name(/datum/preference/name/cyborg, pref_source)
 		return //built in camera handled in proc
-	if(!changed_name)
+	else
 		changed_name = get_standard_name()
 
-	real_name = changed_name
-	name = real_name
-	if(!QDELETED(builtInCamera))
-		builtInCamera.c_tag = real_name //update the camera name too
+	fully_replace_character_name(real_name, changed_name)
+
 
 /mob/living/silicon/robot/proc/get_standard_name()
 	return "[(designation ? "[designation] " : "")][mmi.braintype]-[ident]"
-
-/mob/living/silicon/robot/proc/robot_alerts()
-	var/dat = ""
-	for (var/cat in alarms)
-		dat += text("<B>[cat]</B><BR>\n")
-		var/list/L = alarms[cat]
-		if (L.len)
-			for (var/alarm in L)
-				var/list/alm = L[alarm]
-				var/area/A = alm[1]
-				dat += "<NOBR>"
-				dat += text("-- [A.name]")
-				dat += "</NOBR><BR>\n"
-		else
-			dat += "-- All Systems Nominal<BR>\n"
-		dat += "<BR>\n"
-
-	var/datum/browser/alerts = new(usr, "robotalerts", "Current Station Alerts", 400, 410)
-	alerts.set_content(dat)
-	alerts.open()
 
 /mob/living/silicon/robot/proc/ionpulse()
 	if(!ionpulse_on)
@@ -211,7 +237,7 @@
 
 /mob/living/silicon/robot/proc/toggle_ionpulse()
 	if(!ionpulse)
-		to_chat(src, "<span class='notice'>No thrusters are installed!</span>")
+		to_chat(src, span_notice("No thrusters are installed!"))
 		return
 
 	if(!ion_trail)
@@ -219,7 +245,7 @@
 		ion_trail.set_up(src)
 
 	ionpulse_on = !ionpulse_on
-	to_chat(src, "<span class='notice'>You [ionpulse_on ? null :"de"]activate your ion thrusters.</span>")
+	to_chat(src, span_notice("You [ionpulse_on ? null :"de"]activate your ion thrusters."))
 	if(ionpulse_on)
 		ion_trail.start()
 	else
@@ -231,7 +257,7 @@
 	if(cell)
 		. += "Charge Left: [cell.charge]/[cell.maxcharge]"
 	else
-		. += text("No Cell Inserted!")
+		. += "No Cell Inserted!"
 
 	if(model)
 		for(var/datum/robot_energy_storage/st in model.storages)
@@ -239,58 +265,20 @@
 	if(connected_ai)
 		. += "Master AI: [connected_ai.name]"
 
+/mob/living/silicon/robot/proc/alarm_triggered(datum/source, alarm_type, area/source_area)
+	SIGNAL_HANDLER
+	queueAlarm("--- [alarm_type] alarm detected in [source_area.name]!", alarm_type)
 
-/mob/living/silicon/robot/triggerAlarm(class, area/A, O, obj/alarmsource)
-	if(alarmsource.z != z)
-		return
-	if(stat == DEAD)
-		return TRUE
-	var/list/L = alarms[class]
-	for (var/I in L)
-		if (I == A.name)
-			var/list/alarm = L[I]
-			var/list/sources = alarm[3]
-			if (!(alarmsource in sources))
-				sources += alarmsource
-			return TRUE
-	var/obj/machinery/camera/C = null
-	var/list/CL = null
-	if (O && istype(O, /list))
-		CL = O
-		if (CL.len == 1)
-			C = CL[1]
-	else if (O && istype(O, /obj/machinery/camera))
-		C = O
-	L[A.name] = list(A, (C) ? C : O, list(alarmsource))
-	queueAlarm(text("--- [class] alarm detected in [A.name]!"), class)
-	return TRUE
-
-/mob/living/silicon/robot/cancelAlarm(class, area/A, obj/origin)
-	var/list/L = alarms[class]
-	var/cleared = FALSE
-	for (var/I in L)
-		if (I == A.name)
-			var/list/alarm = L[I]
-			var/list/srcs  = alarm[3]
-			if (origin in srcs)
-				srcs -= origin
-			if (srcs.len == 0)
-				cleared = TRUE
-				L -= I
-	if (cleared)
-		queueAlarm("--- [class] alarm in [A.name] has been cleared.", class, 0)
-	return !cleared
+/mob/living/silicon/robot/proc/alarm_cleared(datum/source, alarm_type, area/source_area)
+	SIGNAL_HANDLER
+	queueAlarm("--- [alarm_type] alarm in [source_area.name] has been cleared.", alarm_type, FALSE)
 
 /mob/living/silicon/robot/can_interact_with(atom/A)
 	if (A == modularInterface)
 		return TRUE //bypass for borg tablets
 	if (low_power_mode)
 		return FALSE
-	var/turf/T0 = get_turf(src)
-	var/turf/T1 = get_turf(A)
-	if (!T0 || ! T1)
-		return FALSE
-	return ISINRANGE(T1.x, T0.x - interaction_range, T0.x + interaction_range) && ISINRANGE(T1.y, T0.y - interaction_range, T0.y + interaction_range)
+	return ..()
 
 /mob/living/silicon/robot/proc/allowed(mob/M)
 	//check if it doesn't require any access at all
@@ -339,11 +327,11 @@
 		if(lamp_enabled || lamp_doom)
 			eye_lights.icon_state = "[model.special_light_key ? "[model.special_light_key]":"[model.cyborg_base_icon]"]_l"
 			eye_lights.color = lamp_doom? COLOR_RED : lamp_color
-			eye_lights.plane = 19 //glowy eyes
+			eye_lights.plane = ABOVE_LIGHTING_PLANE //glowy eyes
 		else
 			eye_lights.icon_state = "[model.special_light_key ? "[model.special_light_key]":"[model.cyborg_base_icon]"]_e"
 			eye_lights.color = COLOR_WHITE
-			eye_lights.plane = -1
+			eye_lights.plane = GAME_PLANE
 		eye_lights.icon = icon
 		add_overlay(eye_lights)
 
@@ -360,12 +348,19 @@
 		add_overlay(head_overlay)
 	update_fire()
 
-/mob/living/silicon/robot/proc/self_destruct()
+/mob/living/silicon/robot/proc/self_destruct(mob/usr)
+	var/turf/groundzero = get_turf(src)
+	message_admins(span_notice("[ADMIN_LOOKUPFLW(usr)] detonated [key_name_admin(src, client)] at [ADMIN_VERBOSEJMP(groundzero)]!"))
+	log_game("[key_name(usr)] detonated [key_name(src)]!")
+	log_combat(usr, src, "detonated cyborg")
+	if(connected_ai)
+		to_chat(connected_ai, "<br><br>[span_alert("ALERT - Cyborg detonation detected: [name]")]<br>")
+
 	if(emagged)
 		QDEL_NULL(mmi)
-		explosion(loc,1,2,4,flame_range = 2)
+		explosion(src, devastation_range = 1, heavy_impact_range = 2, light_impact_range = 4, flame_range = 2)
 	else
-		explosion(loc,-1,0,2)
+		explosion(src, devastation_range = -1, light_impact_range = 2)
 	gib()
 
 /mob/living/silicon/robot/proc/UnlinkSelf()
@@ -395,7 +390,7 @@
 
 /mob/living/silicon/robot/proc/SetLockdown(state = TRUE)
 	// They stay locked down if their wire is cut.
-	if(wires.is_cut(WIRE_LOCKDOWN))
+	if(wires?.is_cut(WIRE_LOCKDOWN))
 		state = TRUE
 	if(state)
 		throw_alert("locked", /atom/movable/screen/alert/locked)
@@ -426,6 +421,7 @@
 		throw_alert("hacked", /atom/movable/screen/alert/hacked)
 	else
 		clear_alert("hacked")
+	set_modularInterface_theme()
 
 /// Special handling for getting hit with a light eater
 /mob/living/silicon/robot/proc/on_light_eater(mob/living/silicon/robot/source, datum/light_eater)
@@ -448,7 +444,7 @@
 	lamp_functional = FALSE
 	playsound(src, 'sound/effects/glass_step.ogg', 50)
 	toggle_headlamp(TRUE)
-	to_chat(src, "<span class='danger'>Your headlamp is broken! You'll need a human to help replace it.</span>")
+	to_chat(src, span_danger("Your headlamp is broken! You'll need a human to help replace it."))
 
 /**
  * Handles headlamp toggling, disabling, and color setting.
@@ -529,19 +525,19 @@
 		return
 	switch(notifytype)
 		if(NEW_BORG) //New Cyborg
-			to_chat(connected_ai, "<br><br><span class='notice'>NOTICE - New cyborg connection detected: <a href='?src=[REF(connected_ai)];track=[html_encode(name)]'>[name]</a></span><br>")
+			to_chat(connected_ai, "<br><br>[span_notice("NOTICE - New cyborg connection detected: <a href='?src=[REF(connected_ai)];track=[html_encode(name)]'>[name]</a>")]<br>")
 		if(NEW_MODEL) //New Model
-			to_chat(connected_ai, "<br><br><span class='notice'>NOTICE - Cyborg model change detected: [name] has loaded the [designation] model.</span><br>")
+			to_chat(connected_ai, "<br><br>[span_notice("NOTICE - Cyborg model change detected: [name] has loaded the [designation] model.")]<br>")
 		if(RENAME) //New Name
-			to_chat(connected_ai, "<br><br><span class='notice'>NOTICE - Cyborg reclassification detected: [oldname] is now designated as [newname].</span><br>")
+			to_chat(connected_ai, "<br><br>[span_notice("NOTICE - Cyborg reclassification detected: [oldname] is now designated as [newname].")]<br>")
 		if(AI_SHELL) //New Shell
-			to_chat(connected_ai, "<br><br><span class='notice'>NOTICE - New cyborg shell detected: <a href='?src=[REF(connected_ai)];track=[html_encode(name)]'>[name]</a></span><br>")
+			to_chat(connected_ai, "<br><br>[span_notice("NOTICE - New cyborg shell detected: <a href='?src=[REF(connected_ai)];track=[html_encode(name)]'>[name]</a>")]<br>")
 		if(DISCONNECT) //Tampering with the wires
-			to_chat(connected_ai, "<br><br><span class='notice'>NOTICE - Remote telemetry lost with [name].</span><br>")
+			to_chat(connected_ai, "<br><br>[span_notice("NOTICE - Remote telemetry lost with [name].")]<br>")
 
 /mob/living/silicon/robot/canUseTopic(atom/movable/M, be_close=FALSE, no_dexterity=FALSE, no_tk=FALSE, need_hands = FALSE, floor_okay=FALSE)
 	if(lockcharge || low_power_mode)
-		to_chat(src, "<span class='warning'>You can't do that right now!</span>")
+		to_chat(src, span_warning("You can't do that right now!"))
 		return FALSE
 	return ..()
 
@@ -578,7 +574,12 @@
 	if(!client)
 		return
 	if(stat == DEAD)
-		sight = (SEE_TURFS|SEE_MOBS|SEE_OBJS)
+		if(SSmapping.level_trait(z, ZTRAIT_NOXRAY))
+			sight = null
+		else if(is_secret_level(z))
+			sight = initial(sight)
+		else
+			sight = (SEE_TURFS|SEE_MOBS|SEE_OBJS)
 		see_in_dark = 8
 		see_invisible = SEE_INVISIBLE_OBSERVER
 		return
@@ -616,6 +617,10 @@
 
 	if(see_override)
 		see_invisible = see_override
+
+	if(SSmapping.level_trait(z, ZTRAIT_NOXRAY))
+		sight = null
+
 	sync_lighting_plane_alpha()
 
 /mob/living/silicon/robot/update_stat()
@@ -634,6 +639,7 @@
 	diag_hud_set_health()
 	diag_hud_set_aishell()
 	update_health_hud()
+	update_icons() //Updates eye_light overlay
 
 /mob/living/silicon/robot/revive(full_heal = FALSE, admin_revive = FALSE)
 	if(..()) //successfully ressuscitated from death
@@ -645,13 +651,16 @@
 		. = TRUE
 		toggle_headlamp(FALSE, TRUE) //This will reenable borg headlamps if doomsday is currently going on still.
 
+
 /mob/living/silicon/robot/fully_replace_character_name(oldname, newname)
-	..()
-	if(oldname != real_name)
-		notify_ai(RENAME, oldname, newname)
+	. = ..()
+	if(!.)
+		return
+	notify_ai(RENAME, oldname, newname)
 	if(!QDELETED(builtInCamera))
 		builtInCamera.c_tag = real_name
 	custom_name = newname
+
 
 /mob/living/silicon/robot/proc/ResetModel()
 	SEND_SIGNAL(src, COMSIG_BORG_SAFE_DECONSTRUCT)
@@ -717,8 +726,8 @@
 	*Checking Exited() to detect if a hat gets up and walks off.
 	*Drones and pAIs might do this, after all.
 */
-/mob/living/silicon/robot/Exited(atom/A)
-	if(hat && hat == A)
+/mob/living/silicon/robot/Exited(atom/movable/gone, direction)
+	if(hat && hat == gone)
 		hat = null
 		if(!QDELETED(src)) //Don't update icons if we are deleted.
 			update_icons()
@@ -731,10 +740,10 @@
 	if(!user.temporarilyRemoveItemFromInventory(new_upgrade)) //calling the upgrade's dropped() proc /before/ we add action buttons
 		return FALSE
 	if(!new_upgrade.action(src, user))
-		to_chat(user, "<span class='danger'>Upgrade error.</span>")
+		to_chat(user, span_danger("Upgrade error."))
 		new_upgrade.forceMove(loc) //gets lost otherwise
 		return FALSE
-	to_chat(user, "<span class='notice'>You apply the upgrade to [src].</span>")
+	to_chat(user, span_notice("You apply the upgrade to [src]."))
 	to_chat(src, "----------------\nNew hardware detected...Identified as \"<b>[new_upgrade]</b>\"...Setup complete.\n----------------")
 	if(new_upgrade.one_use)
 		logevent("Firmware [new_upgrade] run successfully.")
@@ -875,13 +884,13 @@
 
 /mob/living/silicon/robot/buckle_mob(mob/living/M, force = FALSE, check_loc = TRUE, buckle_mob_flags= RIDER_NEEDS_ARM)
 	if(!is_type_in_typecache(M, can_ride_typecache))
-		M.visible_message("<span class='warning'>[M] really can't seem to mount [src]...</span>")
+		M.visible_message(span_warning("[M] really can't seem to mount [src]..."))
 		return
 
 	if(stat || incapacitated())
 		return
 	if(model && !model.allow_riding)
-		M.visible_message("<span class='boldwarning'>Unfortunately, [M] just can't seem to hold onto [src]!</span>")
+		M.visible_message(span_boldwarning("Unfortunately, [M] just can't seem to hold onto [src]!"))
 		return
 
 	buckle_mob_flags= RIDER_NEEDS_ARM // just in case
@@ -913,6 +922,7 @@
 			aicamera.stored[i] = TRUE
 
 /mob/living/silicon/robot/proc/charge(datum/source, amount, repairs)
+	SIGNAL_HANDLER
 	if(model)
 		model.respawn_consumable(src, amount * 0.005)
 	if(cell)
@@ -956,3 +966,10 @@
 	var/datum/computer_file/program/robotact/program = modularInterface.get_robotact()
 	if(program)
 		program.force_full_update()
+
+/mob/living/silicon/robot/get_exp_list(minutes)
+	. = ..()
+
+	var/datum/job/cyborg/cyborg_job_ref = SSjob.GetJobType(/datum/job/cyborg)
+
+	.[cyborg_job_ref.title] = minutes

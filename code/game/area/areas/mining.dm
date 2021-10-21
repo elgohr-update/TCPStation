@@ -3,7 +3,7 @@
 /area/mine
 	icon_state = "mining"
 	has_gravity = STANDARD_GRAVITY
-	area_flags = VALID_TERRITORY | UNIQUE_AREA | FLORA_ALLOWED
+	area_flags = VALID_TERRITORY | UNIQUE_AREA | FLORA_ALLOWED | CULT_PERMITTED
 
 /area/mine/explored
 	name = "Mine"
@@ -16,7 +16,7 @@
 	outdoors = TRUE
 	flags_1 = NONE
 	ambience_index = AMBIENCE_MINING
-	area_flags = VALID_TERRITORY | UNIQUE_AREA | NO_ALERTS
+	area_flags = VALID_TERRITORY | UNIQUE_AREA | NO_ALERTS | CULT_PERMITTED
 	sound_environment = SOUND_AREA_STANDARD_STATION
 	min_ambience_cooldown = 70 SECONDS
 	max_ambience_cooldown = 220 SECONDS
@@ -169,6 +169,9 @@
 /area/icemoon/surface/outdoors // weather happens here
 	name = "Icemoon Wastes"
 	outdoors = TRUE
+
+/area/icemoon/surface/outdoors/noteleport // for places like the cursed spring water
+	area_flags = UNIQUE_AREA | FLORA_ALLOWED | NO_ALERTS | NOTELEPORT
 
 /area/icemoon/surface/outdoors/labor_camp
 	name = "Icemoon Labor Camp"

@@ -10,9 +10,9 @@
 	var/list/baseturf_to_replace
 	var/baseturf
 
-	layer = POINT_LAYER
+	plane = POINT_PLANE
 
-/obj/effect/baseturf_helper/Initialize()
+/obj/effect/baseturf_helper/Initialize(mapload)
 	. = ..()
 	return INITIALIZE_HINT_LATELOAD
 
@@ -93,7 +93,7 @@
 	icon_state = ""
 	var/late = FALSE
 
-/obj/effect/mapping_helpers/Initialize()
+/obj/effect/mapping_helpers/Initialize(mapload)
 	..()
 	return late ? INITIALIZE_HINT_LATELOAD : INITIALIZE_HINT_QDEL
 
@@ -126,6 +126,16 @@
 	else
 		airlock.cyclelinkeddir = dir
 
+/obj/effect/mapping_helpers/airlock/cyclelink_helper_multi
+	name = "airlock multi-cyclelink helper"
+	icon_state = "airlock_multicyclelink_helper"
+	var/cycle_id
+
+/obj/effect/mapping_helpers/airlock/cyclelink_helper_multi/payload(obj/machinery/door/airlock/airlock)
+	if(airlock.closeOtherId)
+		log_mapping("[src] at [AREACOORD(src)] tried to set [airlock] closeOtherId, but it's already set!")
+	else
+		airlock.closeOtherId = cycle_id
 
 /obj/effect/mapping_helpers/airlock/locked
 	name = "airlock lock helper"
@@ -171,7 +181,7 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 /obj/effect/mapping_helpers/no_lava
 	icon_state = "no_lava"
 
-/obj/effect/mapping_helpers/no_lava/Initialize()
+/obj/effect/mapping_helpers/no_lava/Initialize(mapload)
 	. = ..()
 	var/turf/T = get_turf(src)
 	T.turf_flags |= NO_LAVA_GEN
@@ -191,7 +201,7 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 	if(!ispath(component_type,/datum/component))
 		CRASH("Wrong component type in [type] - [component_type] is not a component")
 	var/turf/T = get_turf(src)
-	for(var/atom/A in T.GetAllContents())
+	for(var/atom/A in T.get_all_contents())
 		if(A == src)
 			continue
 		if(target_name && A.name != target_name)
@@ -283,11 +293,14 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 				new /obj/item/toy/balloon/corgi(thing)
 			else
 				openturfs += thing
+
 	//cake + knife to cut it!
-	var/turf/food_turf = get_turf(pick(table))
-	new /obj/item/kitchen/knife(food_turf)
-	var/obj/item/food/cake/birthday/iancake = new(food_turf)
-	iancake.desc = "Happy birthday, Ian!"
+	if(length(table))
+		var/turf/food_turf = get_turf(pick(table))
+		new /obj/item/knife/kitchen(food_turf)
+		var/obj/item/food/cake/birthday/iancake = new(food_turf)
+		iancake.desc = "Happy birthday, Ian!"
+
 	//some balloons! this picks an open turf and pops a few balloons in and around that turf, yay.
 	for(var/i in 1 to balloon_clusters)
 		var/turf/clusterspot = pick_n_take(openturfs)
@@ -391,77 +404,6 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 	log_mapping("[src] at [x],[y] could not find an airlock on current turf, cannot place paper note.")
 	qdel(src)
 
-/obj/effect/mapping_helpers/simple_pipes
-	name = "Simple Pipes"
-	late = TRUE
-	icon_state = "pipe-3"
-	var/piping_layer = 3
-	var/pipe_color = ""
-	var/connection_num = 0
-	var/hide = FALSE
-
-/obj/effect/mapping_helpers/simple_pipes/LateInitialize()
-	var/list/connections = list( dir2text(NORTH)  = FALSE, dir2text(SOUTH) = FALSE , dir2text(EAST) = FALSE , dir2text(WEST) = FALSE)
-	var/list/valid_connectors = typecacheof(/obj/machinery/atmospherics)
-	for(var/direction in connections)
-		var/turf/T = get_step(src,  text2dir(direction))
-		for(var/machine_type_owo in T.contents)
-			if(istype(machine_type_owo,type))
-				var/obj/effect/mapping_helpers/simple_pipes/found = machine_type_owo
-				if(found.piping_layer != piping_layer)
-					continue
-				connections[direction] = TRUE
-				connection_num++
-				break
-			if(!is_type_in_typecache(machine_type_owo,valid_connectors))
-				continue
-			var/obj/machinery/atmospherics/machine = machine_type_owo
-
-			if(machine.piping_layer != piping_layer)
-				continue
-
-			if(angle2dir(dir2angle(text2dir(direction))+180) & machine.initialize_directions)
-				connections[direction] = TRUE
-				connection_num++
-				break
-
-	switch(connection_num)
-		if(1)
-			for(var/direction in connections)
-				if(connections[direction] != TRUE)
-					continue
-				spawn_pipe(direction,/obj/machinery/atmospherics/pipe/simple)
-		if(2)
-			for(var/direction in connections)
-				if(connections[direction] != TRUE)
-					continue
-				//Detects straight pipes connected from east to west , north to south etc.
-				if(connections[dir2text(angle2dir(dir2angle(text2dir(direction))+180))] == TRUE)
-					spawn_pipe(direction,/obj/machinery/atmospherics/pipe/simple)
-					break
-
-				for(var/direction2 in connections - direction)
-					if(connections[direction2] != TRUE)
-						continue
-					spawn_pipe(dir2text(text2dir(direction)+text2dir(direction2)),/obj/machinery/atmospherics/pipe/simple)
-		if(3)
-			for(var/direction in connections)
-				if(connections[direction] == FALSE)
-					spawn_pipe(direction,/obj/machinery/atmospherics/pipe/manifold)
-		if(4)
-			spawn_pipe(dir2text(NORTH),/obj/machinery/atmospherics/pipe/manifold4w)
-
-	qdel(src)
-
-//spawn pipe
-/obj/effect/mapping_helpers/simple_pipes/proc/spawn_pipe(direction,type )
-	var/obj/machinery/atmospherics/pipe/pipe = new type(get_turf(src),TRUE,text2dir(direction))
-	pipe.hide = hide
-	pipe.piping_layer = piping_layer
-	pipe.update_layer()
-	pipe.paint(pipe_color)
-
-
 //This helper applies traits to things on the map directly.
 /obj/effect/mapping_helpers/trait_injector
 	name = "Trait Injector"
@@ -484,7 +426,7 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 		CRASH("Wrong trait in [type] - [trait_name] is not a trait")
 	var/turf/target_turf = get_turf(src)
 	var/matches_found = 0
-	for(var/a in target_turf.GetAllContents())
+	for(var/a in target_turf.get_all_contents())
 		var/atom/atom_on_turf = a
 		if(atom_on_turf == src)
 			continue
@@ -514,7 +456,7 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 	var/target_name
 	/// This is the var tha will be set with the fetched icon. In case you want to set some secondary icon sheets like inhands and such.
 	var/target_variable = "icon"
-	/// This should return raw dmi in response to http get request. For example: "https://github.com/tgstation/SS13-sprites/raw/master/mob/medu.dmi"
+	/// This should return raw dmi in response to http get request. For example: "https://github.com/tgstation/SS13-sprites/raw/master/mob/medu.dmi?raw=true"
 	var/icon_url
 
 /obj/effect/mapping_helpers/custom_icon/LateInitialize()
@@ -522,7 +464,7 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 	var/I = fetch_icon(icon_url)
 	var/turf/target_turf = get_turf(src)
 	var/matches_found = 0
-	for(var/a in target_turf.GetAllContents())
+	for(var/a in target_turf.get_all_contents())
 		var/atom/atom_on_turf = a
 		if(atom_on_turf == src)
 			continue
@@ -541,17 +483,55 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 
 /obj/effect/mapping_helpers/custom_icon/proc/fetch_icon(url)
 	var/static/icon_cache = list()
+	var/static/query_in_progress = FALSE //We're using a single tmp file so keep it linear.
+	if(query_in_progress)
+		UNTIL(!query_in_progress)
 	if(icon_cache[url])
 		return icon_cache[url]
 	log_asset("Custom Icon Helper fetching dmi from: [url]")
 	var/datum/http_request/request = new()
 	var/file_name = "tmp/custom_map_icon.dmi"
 	request.prepare(RUSTG_HTTP_METHOD_GET, url , "", "", file_name)
+	query_in_progress = TRUE
 	request.begin_async()
 	UNTIL(request.is_complete())
 	var/datum/http_response/response = request.into_response()
 	if(response.errored || response.status_code != 200)
-		stack_trace("Failed to fetch mapped custom icon from url [url], code: [response.status_code]")
+		query_in_progress = FALSE
+		CRASH("Failed to fetch mapped custom icon from url [url], code: [response.status_code], error: [response.error]")
 	var/icon/I = new(file_name)
 	icon_cache[url] = I
+	query_in_progress = FALSE
 	return I
+
+/**
+ * ## trapdoor placer!
+ *
+ * This places an unlinked trapdoor in the tile its on (so someone with a remote needs to link it up first)
+ * Admins may spawn this in the round for additional trapdoors if they so desire
+ * if YOU want to learn more about trapdoors, read about the component at trapdoor.dm
+ * note: this is not a turf subtype because the trapdoor needs the type of the turf to turn back into
+ */
+/obj/effect/mapping_helpers/trapdoor_placer
+	name = "trapdoor placer"
+	late = TRUE
+	icon_state = "trapdoor"
+
+/obj/effect/mapping_helpers/trapdoor_placer/LateInitialize()
+	var/turf/component_target = get_turf(src)
+	component_target.AddComponent(/datum/component/trapdoor, starts_open = FALSE)
+	qdel(src)
+
+/obj/effect/mapping_helpers/ztrait_injector
+	name = "ztrait injector"
+	icon_state = "ztrait"
+	/// List of traits to add to this.
+	var/list/traits_to_add = list()
+
+/obj/effect/mapping_helpers/ztrait_injector/Initialize()
+	. = ..()
+	var/datum/space_level/level = SSmapping.z_list[z]
+	if(!level || !length(traits_to_add))
+		return
+	level.traits |= traits_to_add
+	SSweather.update_z_level(level) //in case of someone adding a weather for the level, we want SSweather to update for that

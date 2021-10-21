@@ -15,6 +15,7 @@
 =======
 >>>>>>> 3d1a0a5b367a080c42fba0e85ce0382b2cbcb284
 		#include "map_files\IceBoxStation\IceBoxStation.dmm"
+		#include "map_files\tramstation\tramstation.dmm"
 
 		#ifdef CIBUILDING
 			#include "templates.dm"

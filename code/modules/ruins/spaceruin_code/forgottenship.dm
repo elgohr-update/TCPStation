@@ -172,7 +172,6 @@ GLOBAL_VAR_INIT(fscpassword, generate_password())
 /mob/living/simple_animal/hostile/nanotrasen/elite
 	name = "Nanotrasen Elite Assault Officer"
 	desc = "Pray for your life, syndicate. Run while you can."
-	icon = 'icons/mob/simple_human.dmi'
 	icon_state = "nanotrasen_ert"
 	icon_living = "nanotrasen_ert"
 	maxHealth = 150
@@ -185,7 +184,7 @@ GLOBAL_VAR_INIT(fscpassword, generate_password())
 	rapid_melee = 3
 	retreat_distance = 0
 	minimum_distance = 1
-	atmos_requirements = list("min_oxy" = 0, "max_oxy" = 0, "min_tox" = 0, "max_tox" = 0, "min_co2" = 0, "max_co2" = 0, "min_n2" = 0, "max_n2" = 0)
+	atmos_requirements = list("min_oxy" = 0, "max_oxy" = 0, "min_plas" = 0, "max_plas" = 0, "min_co2" = 0, "max_co2" = 0, "min_n2" = 0, "max_n2" = 0)
 	minbodytemp = 0
 	projectiletype = /obj/projectile/beam/laser
 	projectilesound = 'sound/weapons/laser.ogg'

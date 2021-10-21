@@ -26,6 +26,7 @@
 	attack_verb_continuous = "slices"
 	attack_verb_simple = "slice"
 	attack_sound = 'sound/weapons/bladeslice.ogg'
+	attack_vis_effect = ATTACK_EFFECT_SLASH
 	vision_range = 9
 	aggro_vision_range = 9
 	move_force = MOVE_FORCE_VERY_STRONG
@@ -37,11 +38,14 @@
 	deathmessage = "fades as the energies that tied it to this world dissipate."
 	deathsound = 'sound/magic/demon_dies.ogg'
 	stat_attack = HARD_CRIT
-	is_flying_animal = TRUE
 	robust_searching = TRUE
 	footstep_type = FOOTSTEP_MOB_CLAW
 	/// Distance the demon will teleport from the target
 	var/teleport_distance = 3
+
+/mob/living/simple_animal/hostile/asteroid/ice_demon/Initialize(mapload)
+	. = ..()
+	AddElement(/datum/element/simple_flying)
 
 /obj/projectile/temp/basilisk/ice
 	name = "ice blast"
@@ -49,6 +53,7 @@
 	speed = 4
 	nodamage = FALSE
 	temperature = -75
+	slowdown = FALSE
 
 /mob/living/simple_animal/hostile/asteroid/ice_demon/OpenFire()
 	ranged_cooldown = world.time + ranged_cooldown_time

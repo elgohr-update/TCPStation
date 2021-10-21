@@ -33,7 +33,7 @@ Then the player gets the profit from selling his own wasted time.
 
 	var/profit_ratio = 1 //Percentage that gets sent to the seller, rest goes to cargo.
 
-	var/list/contents = AM.GetAllContents()
+	var/list/contents = AM.get_all_contents()
 
 	var/datum/export_report/report = external_report
 
@@ -41,7 +41,7 @@ Then the player gets the profit from selling his own wasted time.
 		report = new
 
 	// We go backwards, so it'll be innermost objects sold first
-	for(var/i in reverseRange(contents))
+	for(var/i in reverse_range(contents))
 		var/atom/movable/thing = i
 		var/sold = FALSE
 		if(QDELETED(thing))
@@ -64,15 +64,25 @@ Then the player gets the profit from selling his own wasted time.
 	return report
 
 /datum/export
-	var/unit_name = "" // Unit name. Only used in "Received [total_amount] [name]s [message]." message
+	/// Unit name. Only used in "Received [total_amount] [name]s [message]." message
+	var/unit_name = ""
 	var/message = ""
-	var/cost = 1 // Cost of item, in cargo credits. Must not alow for infinite price dupes, see above.
-	var/k_elasticity = 1/30 //coefficient used in marginal price calculation that roughly corresponds to the inverse of price elasticity, or "quantity elasticity"
-	var/list/export_types = list() // Type of the exported object. If none, the export datum is considered base type.
-	var/include_subtypes = TRUE // Set to FALSE to make the datum apply only to a strict type.
-	var/list/exclude_types = list() // Types excluded from export
+	/// Cost of item, in cargo credits. Must not allow for infinite price dupes, see above.
+	var/cost = 1
+	/// whether this export can have a negative impact on the cargo budget or not
+	var/allow_negative_cost = FALSE
+	/// coefficient used in marginal price calculation that roughly corresponds to the inverse of price elasticity, or "quantity elasticity"
+	var/k_elasticity = 1/30
+	/// The multiplier of the amount sold shown on the report. Useful for exports, such as material, which costs are not strictly per single units sold.
+	var/amount_report_multiplier = 1
+	/// Type of the exported object. If none, the export datum is considered base type.
+	var/list/export_types = list()
+	/// Set to FALSE to make the datum apply only to a strict type.
+	var/include_subtypes = TRUE
+	/// Types excluded from export
+	var/list/exclude_types = list()
 
-	//cost includes elasticity, this does not.
+	/// cost includes elasticity, this does not.
 	var/init_cost
 
 
@@ -138,7 +148,7 @@ Then the player gets the profit from selling his own wasted time.
 	///Utilized in the pricetag component. Splits the object's profit when it has a pricetag by the specified amount.
 	var/profit_ratio = 0
 
-	if(amount <=0 || the_cost <=0)
+	if(amount <=0 || (the_cost <=0 && !allow_negative_cost))
 		return FALSE
 	if(dry_run == FALSE)
 		if(SEND_SIGNAL(O, COMSIG_ITEM_SOLD, item_value = get_cost(O, apply_elastic)) & COMSIG_ITEM_SPLIT_VALUE)
@@ -149,10 +159,7 @@ Then the player gets the profit from selling his own wasted time.
 		the_cost = the_cost * ((100 - profit_ratio) * 0.01)
 	report.total_value[src] += the_cost
 
-	if(istype(O, /datum/export/material))
-		report.total_amount[src] += amount*MINERAL_MATERIAL_AMOUNT
-	else
-		report.total_amount[src] += amount
+	report.total_amount[src] += amount*amount_report_multiplier
 
 	if(!dry_run)
 		if(apply_elastic)

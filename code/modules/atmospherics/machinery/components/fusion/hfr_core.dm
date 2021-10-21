@@ -24,6 +24,8 @@
 	var/start_cooling = FALSE
 	///Checks for the fuel to be injected
 	var/start_fuel = FALSE
+	///Checks for the moderators to be injected
+	var/start_moderator = FALSE
 
 	/**
 	 * Hypertorus internal objects and gasmixes
@@ -39,12 +41,20 @@
 	var/obj/machinery/atmospherics/components/unary/hypertorus/waste_output/linked_output
 	///Stores the information of the corners of the machine
 	var/list/corners = list()
+	///Stores the three inputs/outputs of the HFR, needed for cracking the parts
+	var/list/machine_parts = list()
 	///Stores the information of the fusion gasmix
 	var/datum/gas_mixture/internal_fusion
 	///Stores the information of the moderators gasmix
 	var/datum/gas_mixture/moderator_internal
-	///Set the filtering type of the waste remove
-	var/filter_type = null
+	///Set the filtering list of the waste remove
+	var/list/moderator_scrubbing = list(
+		/datum/gas/helium,
+		)
+	///Set the amount of moles per tick should be removed from the moderator by filtering
+	var/moderator_filtering_rate = 100
+	///Stores the current fuel mix that the user has selected
+	var/datum/hfr_fuel/selected_fuel
 
 	/**
 	 * Fusion vars
@@ -81,26 +91,6 @@
 	///The amount of heat that is finally emitted, based on the power output. Min and max are variables that depends of the modifier
 	var/heat_output = 0
 
-	///Stores the moles of the gases (the ones with m_ are of the moderator mix)
-	var/tritium = 0
-	var/hydrogen = 0
-	var/helium = 0
-
-	var/m_plasma = 0
-	var/m_nitrogen = 0
-	var/m_oxygen = 0
-	var/m_co2 = 0
-	var/m_h2o = 0
-	var/m_n2o = 0
-	var/m_no2 = 0
-	var/m_freon = 0
-	var/m_bz = 0
-	var/m_proto_nitrate = 0
-	var/m_healium = 0
-	var/m_zauker = 0
-	var/m_antinoblium = 0
-	var/m_hypernoblium = 0
-
 	///Check if the user want to remove the waste gases
 	var/waste_remove = FALSE
 	///User controlled variable to control the flow of the fusion by changing the contact of the material
@@ -114,9 +104,9 @@
 	///Stores the iron content produced by the fusion
 	var/iron_content = 0
 	///User controlled variable to control the flow of the fusion by changing the amount of fuel injected
-	var/fuel_injection_rate = 250
+	var/fuel_injection_rate = 25
 	///User controlled variable to control the flow of the fusion by changing the amount of moderators injected
-	var/moderator_injection_rate = 250
+	var/moderator_injection_rate = 25
 
 	///Integrity of the machine, if reaches 900 the machine will explode
 	var/critical_threshold_proximity = 0
@@ -161,11 +151,12 @@
 	///Var used in the meltdown phase
 	var/final_countdown = FALSE
 
-/obj/machinery/atmospherics/components/unary/hypertorus/core/Initialize()
+/obj/machinery/atmospherics/components/unary/hypertorus/core/Initialize(mapload)
 	. = ..()
 	internal_fusion = new
-	internal_fusion.assert_gases(/datum/gas/hydrogen, /datum/gas/tritium)
+	internal_fusion.volume = 5000
 	moderator_internal = new
+	moderator_internal.volume = 10000
 
 	radio = new(src)
 	radio.keyslot = new radio_key
@@ -191,4 +182,5 @@
 		QDEL_NULL(corner)
 	QDEL_NULL(radio)
 	QDEL_NULL(soundloop)
+	machine_parts = null
 	return..()
